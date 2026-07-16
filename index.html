@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Roverto — Autonomous mapping rover</title>
+    <meta
+      name="description"
+      content="Roverto: an autonomous SLAM rover that maps a room it has never seen — through a single 70° depth cone."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <!-- ===================== Header ===================== -->
+    <header class="site-header" id="top">
+      <div class="container">
+        <a class="wordmark" href="#top">ROVERTO<span class="dot">.</span></a>
+        <nav class="site-nav">
+          <a href="#problem">Problem</a>
+          <a href="#system">System</a>
+          <a href="#hardware">Hardware</a>
+          <a href="#results">Results</a>
+        </nav>
+        <span class="chip">TUM Science Hackathon · 2026</span>
+      </div>
+    </header>
+
+    <!-- ===================== Hero ===================== -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero-copy">
+          <div class="hero-eyebrow">
+            <span class="eyebrow">RaspRover 4WD · ROS&nbsp;2 Jazzy</span>
+            <span class="chip">Autonomous</span>
+          </div>
+          <h1 class="display">See beyond <span class="thin">the cone.</span></h1>
+          <p class="lead">
+            An autonomous rover that maps a room it has never seen — choosing
+            where to look, in real time, through a single 70° depth camera.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn--primary" href="#results">See it map itself ↓</a>
+            <a class="btn btn--ghost" href="#system">View the system</a>
+          </div>
+        </div>
+
+        <!-- Cone device -->
+        <figure class="diagram-frame reveal">
+          <span class="corner tl"></span><span class="corner tr"></span>
+          <span class="corner bl"></span><span class="corner br"></span>
+          <img class="cone-svg" src="./media/rasprover.webp" alt="Roverto — Waveshare RaspRover with pan/tilt depth camera"
+               style="width:100%;aspect-ratio:1/1;object-fit:contain;background:#f4f3ee;border-radius:3px" />
+          <figcaption>
+            <span class="mono">FIG.01 — RASPROVER PT</span>
+            <span class="mono accent">L515 · 70° FOV</span>
+          </figcaption>
+        </figure>
+      </div>
+
+      <div class="container">
+        <div class="spec-strip">
+          <div class="spec"><span class="k">Sensing</span><span class="v">70° depth cone</span></div>
+          <div class="spec"><span class="k">Autonomy</span><span class="v">Frontier explore</span></div>
+          <div class="spec"><span class="k">Mapping</span><span class="v">Live SLAM</span></div>
+          <div class="spec"><span class="k">Compute</span><span class="v">Raspberry Pi 5</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Problem ===================== -->
+    <section id="problem">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="idx">01</span> — The problem</span>
+          <h2>A narrow cone makes a fragile map.</h2>
+          <p class="note">The L515 is a depth camera, not a 360° lidar — it sees one forward arc.</p>
+        </div>
+
+        <div class="grid-2">
+          <figure class="diagram-frame reveal">
+            <span class="corner tl"></span><span class="corner tr"></span>
+            <span class="corner bl"></span><span class="corner br"></span>
+            <svg class="cone-svg" viewBox="0 0 440 400" role="img" aria-label="The rover senses only one sector; the rest is blind">
+              <circle cx="220" cy="200" r="150" fill="none" stroke="#c6c5bc" stroke-width="1" stroke-dasharray="2 7" />
+              <!-- blind sweep -->
+              <path d="M 220 200 L 220 50 A 150 150 0 1 0 343 121 Z" fill="#17191b" fill-opacity="0.05" />
+              <!-- lit sector (70deg, pointing up) -->
+              <path d="M 220 200 L 177 57 A 150 150 0 0 1 263 57 Z" fill="#ff4a1c" fill-opacity="0.12" stroke="#ff4a1c" stroke-width="1.3" />
+              <circle cx="220" cy="200" r="22" fill="#fdfdfb" stroke="#17191b" stroke-width="1.4" />
+              <circle cx="220" cy="200" r="4" fill="#ff4a1c" />
+              <text x="232" y="92" font-family="IBM Plex Mono, monospace" font-size="12" fill="#c0380f">SEEN</text>
+              <text x="300" y="300" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1.5" fill="#8b9094">BLIND · 290°</text>
+            </svg>
+            <figcaption>
+              <span class="mono">FIG.02 — COVERAGE</span>
+              <span class="mono">80% UNSEEN</span>
+            </figcaption>
+          </figure>
+
+          <div class="point-list">
+            <div class="point reveal">
+              <span class="num">A</span>
+              <div><h3>Blind flanks</h3><p>Nothing to the sides or rear — every turn into the unknown is a guess.</p></div>
+            </div>
+            <div class="point reveal">
+              <span class="num">B</span>
+              <div><h3>Slow coverage</h3><p>Frontiers only appear inside the arc, so the map fills in slowly.</p></div>
+            </div>
+            <div class="point reveal">
+              <span class="num">C</span>
+              <div><h3>Drift</h3><p>Too little scan overlap for loop closure; the pose drifts over time.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== System ===================== -->
+    <section id="system">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="idx">02</span> — The system</span>
+          <h2>Sensors become decisions.</h2>
+          <p class="note">Each block is a ROS 2 node; the labels are the topics that connect them.</p>
+        </div>
+
+        <div class="pipeline reveal">
+          <div class="pnode"><span class="stage">SENSE</span><h4>Base driver</h4><span class="topic">/odom · /imu</span><span class="flow"></span></div>
+          <div class="pnode"><span class="stage">FUSE</span><h4>EKF fusion</h4><span class="topic">/odometry/filtered</span><span class="flow"></span></div>
+          <div class="pnode"><span class="stage">SENSE</span><h4>Depth → scan</h4><span class="topic">/scan</span><span class="flow"></span></div>
+          <div class="pnode"><span class="stage">MAP</span><h4>SLAM</h4><span class="topic">/map</span><span class="flow"></span></div>
+          <div class="pnode"><span class="stage">PLAN</span><h4>Nav2</h4><span class="topic">/plan</span><span class="flow"></span></div>
+          <div class="pnode"><span class="stage">DECIDE</span><h4>Explorer</h4><span class="topic">frontier goal</span><span class="flow"></span></div>
+          <div class="pnode"><span class="stage">ACT</span><h4>Motors</h4><span class="topic">/cmd_vel</span><span class="flow"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Hardware ===================== -->
+    <section id="hardware">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="idx">03</span> — Hardware</span>
+          <h2>Two controllers, one chassis.</h2>
+          <p class="note">A Raspberry Pi 5 thinks; an ESP32 moves. They talk over USB serial.</p>
+        </div>
+
+        <div class="sheet reveal">
+          <div class="sheet-row"><span class="id">01</span><span class="name">Raspberry Pi 5</span><span class="desc">Upper computer — perception, SLAM, Nav2, exploration.</span><span class="tag upper">Upper brain</span></div>
+          <div class="sheet-row"><span class="id">02</span><span class="name">ESP32</span><span class="desc">Lower computer — motor PID, IMU, power, pan/tilt servos.</span><span class="tag">Lower brain</span></div>
+          <div class="sheet-row"><span class="id">03</span><span class="name">RealSense L515</span><span class="desc">Solid-state depth camera — the 70° perception cone.</span><span class="tag">Sensor</span></div>
+          <div class="sheet-row"><span class="id">04</span><span class="name">Pan / tilt gimbal</span><span class="desc">Steers the camera frame independent of the body.</span><span class="tag">Actuator</span></div>
+          <div class="sheet-row"><span class="id">05</span><span class="name">IMU + wheel encoders</span><span class="desc">Close the motion loop for odometry fusion.</span><span class="tag">Sensor</span></div>
+          <div class="sheet-row"><span class="id">06</span><span class="name">4× drive motors</span><span class="desc">Differential drive across four encoder motors.</span><span class="tag">Drive</span></div>
+        </div>
+
+        <div class="reveal" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:28px">
+          <figure class="media" style="aspect-ratio:4/5"><img src="./media/rover-photo.jpg" alt="Roverto — top view, Pi 5 and gimbal" /></figure>
+          <figure class="media" style="aspect-ratio:4/5"><img src="./media/rover-photo-2.jpg" alt="Roverto — side view with L515 on the gimbal" /></figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Breakthroughs ===================== -->
+    <section id="engineering">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="idx">04</span> — Engineering</span>
+          <h2>Three fixes that made it map.</h2>
+          <p class="note">Small corrections, large consequences.</p>
+        </div>
+
+        <div class="cards-3">
+          <div class="card reveal">
+            <div class="ba"><span class="before">Discontinued L515</span> → <span class="after">Streaming on Jazzy</span></div>
+            <svg class="mini" viewBox="0 0 240 52" aria-hidden="true">
+              <circle cx="40" cy="26" r="13" fill="none" stroke="#8b9094" stroke-width="2.5" />
+              <line x1="31" y1="35" x2="49" y2="17" stroke="#8b9094" stroke-width="2.5" />
+              <text x="112" y="32" font-family="IBM Plex Mono, monospace" font-size="16" fill="#8b9094">→</text>
+              <path d="M 180 27 l 9 10 l 20 -22" fill="none" stroke="#ff4a1c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <h3>End-of-life camera, revived</h3>
+            <p>Built the RealSense SDK from source to run the discontinued Intel L515 on ROS 2 Jazzy.</p>
+            <span class="claim verified">Verified on robot</span>
+          </div>
+
+          <div class="card reveal">
+            <div class="ba"><span class="before">Frozen heading</span> → <span class="after">Fused pose</span></div>
+            <svg class="mini" viewBox="0 0 240 52" aria-hidden="true">
+              <line x1="30" y1="26" x2="60" y2="26" stroke="#8b9094" stroke-width="2.5" />
+              <text x="112" y="32" font-family="IBM Plex Mono, monospace" font-size="16" fill="#8b9094">→</text>
+              <path d="M 200 26 a 22 22 0 1 1 -6 -15" fill="none" stroke="#ff4a1c" stroke-width="2.5" />
+              <path d="M 194 5 l 4 8 l -9 1 z" fill="#ff4a1c" />
+            </svg>
+            <h3>Fused odometry</h3>
+            <p>IMU fused with wheel odometry yields one smooth, tracked heading.</p>
+            <span class="claim verified">Verified on robot</span>
+          </div>
+
+          <div class="card reveal">
+            <div class="ba"><span class="before">Fixed view</span> → <span class="after">Tracked pan/tilt</span></div>
+            <svg class="mini" viewBox="0 0 240 52" aria-hidden="true">
+              <path d="M 44 26 L 74 10 L 74 42 Z" fill="none" stroke="#8b9094" stroke-width="2" />
+              <text x="112" y="32" font-family="IBM Plex Mono, monospace" font-size="16" fill="#8b9094">→</text>
+              <path d="M 168 26 L 206 6 L 206 46 Z" fill="#ff4a1c" fill-opacity="0.12" stroke="#ff4a1c" stroke-width="2" />
+            </svg>
+            <h3>Camera on the gimbal</h3>
+            <p>Mounting the camera on the gimbal lets its frame follow pan and tilt.</p>
+            <span class="claim integrating">In integration</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Proof ===================== -->
+    <section class="proof" id="results">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="idx">05</span> — Proof</span>
+          <h2>It mapped a room on its own.</h2>
+          <p class="note">A live run on the Pi — no joystick, no scripted path.</p>
+        </div>
+
+        <div class="metrics reveal">
+          <div class="metric"><div class="v" data-count="0">0</div><div class="k">manual waypoints</div></div>
+          <div class="metric"><div class="v" data-count="70" data-suffix="°">0°</div><div class="k">field of view</div></div>
+          <div class="metric"><div class="v"><span class="accent" data-count="3.2" data-suffix="×" data-dec="1">0×</span></div><div class="k">map grown · 84×119 → 140×230 cells</div></div>
+        </div>
+
+        <div class="proof-media reveal">
+          <figure class="media" style="aspect-ratio:16/9">
+            <video src="./media/slam-1.webm" autoplay muted loop playsinline></video>
+          </figure>
+          <figure class="media" style="aspect-ratio:16/9">
+            <video src="./media/slam-2.webm" autoplay muted loop playsinline></video>
+          </figure>
+        </div>
+        <p class="mono reveal" style="color:#9aa1a5;margin-top:14px">
+          Live SLAM in Foxglove · the map grows as Roverto drives itself
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== QR actions ===================== -->
+    <section id="qr">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="idx">06</span> — QR actions</span>
+          <h2>Scan a code, trigger an action.</h2>
+          <p class="note">Token-validated — Roverto runs only actions it already trusts. Click the image for fullscreen.</p>
+        </div>
+        <figure class="showcase-media reveal" title="Click for fullscreen">
+          <img src="./media/qr-scanner.png" alt="Roverto QR scanner dashboard" />
+        </figure>
+      </div>
+    </section>
+
+    <!-- ===================== Roadmap ===================== -->
+    <section id="roadmap">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow"><span class="idx">07</span> — Roadmap</span>
+          <h2>Seeing beyond the cone.</h2>
+          <p class="note">The platform is built; the field of view is the next frontier.</p>
+        </div>
+
+        <div class="timeline">
+          <div class="milestone now reveal">
+            <div class="when">Now · verified</div>
+            <h3>Autonomous mapping</h3>
+            <p>Frontier exploration with live SLAM, running end-to-end on the robot.</p>
+          </div>
+          <div class="milestone reveal">
+            <div class="when">Next</div>
+            <h3>Gimbal sweeps</h3>
+            <p>Pan and tilt the camera to widen coverage without turning the whole body.</p>
+          </div>
+          <div class="milestone reveal">
+            <div class="when">Later</div>
+            <h3>Visual loop closure</h3>
+            <p>RGB-D SLAM (RTAB-Map) to correct the drift a narrow scan can't.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Footer ===================== -->
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <span class="wordmark">ROVERTO<span class="dot">.</span></span>
+            <p>Part <strong>rover</strong>, part <strong>Roberto</strong> — an autonomous SLAM rover built at the TUM Science Hackathon on a Waveshare RaspRover 4WD.</p>
+          </div>
+          <div>
+            <h4>Project</h4>
+            <div class="footer-list">
+              <span>Code available on request</span>
+              <a href="https://app.foxglove.dev/">Foxglove</a>
+              <span>ROS 2 Jazzy · Ubuntu 24.04</span>
+            </div>
+          </div>
+          <div>
+            <h4>Team</h4>
+            <div class="footer-list">
+              <span>Max</span><span>Michael</span><span>Severin</span><span>Fausto</span>
+            </div>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>© 2026 Roverto</span>
+          <span>See beyond the cone.</span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./main.js" defer></script>
+  </body>
+</html>
